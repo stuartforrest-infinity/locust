@@ -72,25 +72,22 @@ class HttpSession(requests.Session):
         else:
             return "%s%s" % (self.base_url, path)
 
-    def request(self, method, url, name=None, catch_response=False, **kwargs):
+
+    def send(self, request, name=None, catch_response=None, **kwargs):
         """
-        Constructs and sends a :py:class:`requests.Request`.
+        Constructs and sends a :py:class:`requests.Request`.\
         Returns :py:class:`requests.Response` object.
 
         :param method: method for the new :class:`Request` object.
         :param url: URL for the new :class:`Request` object.
+        :param request: the :class:`Request` object.
         :param name: (optional) An argument that can be specified to use as label in Locust's statistics instead of the URL path.
           This can be used to group different URL's that are requested into a single entry in Locust's statistics.
         :param catch_response: (optional) Boolean argument that, if set, can be used to make a request return a context manager
           to work as argument to a with statement. This will allow the request to be marked as a fail based on the content of the
           response, even if the response code is ok (2xx). The opposite also works, one can use catch_response to catch a request
           and then mark it as successful even if the response code was not (i.e 500 or 404).
-        :param params: (optional) Dictionary or bytes to be sent in the query string for the :class:`Request`.
-        :param data: (optional) Dictionary or bytes to send in the body of the :class:`Request`.
-        :param headers: (optional) Dictionary of HTTP Headers to send with the :class:`Request`.
-        :param cookies: (optional) Dict or CookieJar object to send with the :class:`Request`.
-        :param files: (optional) Dictionary of ``'filename': file-like-objects`` for multipart encoding upload.
-        :param auth: (optional) Auth tuple or callable to enable Basic/Digest/Custom HTTP Auth.
+
         :param timeout: (optional) How long in seconds to wait for the server to send data before giving up, as a float,
             or a (`connect timeout, read timeout <user/advanced.html#timeouts>`_) tuple.
         :type timeout: float or tuple
@@ -103,17 +100,19 @@ class HttpSession(requests.Session):
         """
 
         # prepend url with hostname unless it's already an absolute URL
-        url = self._build_url(url)
+        url = request.url
+        method = request.method
+        
 
         # store meta data that is used when reporting the request to locust's statistics
         request_meta = {}
 
         # set up pre_request hook for attaching meta data to the request object
         request_meta["method"] = method
-        request_meta["start_time"] = time.monotonic()
-
-        response = self._send_request_safe_mode(method, url, **kwargs)
-
+        request_meta["start_time"] = time.time()
+        
+        response = self._send_request_safe_mode(request, **kwargs)
+     
         # record the consumed time
         request_meta["response_time"] = (time.monotonic() - request_meta["start_time"]) * 1000
 
@@ -158,22 +157,24 @@ class HttpSession(requests.Session):
             if name:
                 response.url = orig_url
             return response
-
-    def _send_request_safe_mode(self, method, url, **kwargs):
+    
+    def _send_request_safe_mode(self, request, **kwargs):
         """
         Send an HTTP request, and catch any exception that might occur due to connection problems.
 
         Safe mode has been removed from requests 1.x.
         """
         try:
-            return super().request(method, url, **kwargs)
+            return requests.Session.send(self, request, **kwargs)
+
         except (MissingSchema, InvalidSchema, InvalidURL):
             raise
         except RequestException as e:
             r = LocustResponse()
             r.error = e
             r.status_code = 0  # with this status_code, content returns None
-            r.request = Request(method, url).prepare()
+
+            r.request = request
             return r
 
 
