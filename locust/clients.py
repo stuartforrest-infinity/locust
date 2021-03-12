@@ -72,7 +72,7 @@ class HttpSession(requests.Session):
         else:
             return "%s%s" % (self.base_url, path)
 
-    def request(self, request, method, url, name=None, catch_response=None, **kwargs):
+    def send(self, request, method, name=None, catch_response=None, **kwargs):
         """
         Constructs and sends a :py:class:`requests.Request`.
         Returns :py:class:`requests.Response` object.
