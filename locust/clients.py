@@ -72,7 +72,7 @@ class HttpSession(requests.Session):
         else:
             return "%s%s" % (self.base_url, path)
 
-    def request(self, method, url, name=None, catch_response=False, **kwargs):
+    def request(self, request, method, url, name=None, catch_response=None, **kwargs):
         """
         Constructs and sends a :py:class:`requests.Request`.
         Returns :py:class:`requests.Response` object.
@@ -102,8 +102,8 @@ class HttpSession(requests.Session):
         :param cert: (optional) if String, path to ssl client cert file (.pem). If Tuple, ('cert', 'key') pair.
         """
 
-        # prepend url with hostname unless it's already an absolute URL
-        url = self._build_url(url)
+        url = request.url
+        method = request.method
 
         # store meta data that is used when reporting the request to locust's statistics
         request_meta = {}
@@ -112,7 +112,7 @@ class HttpSession(requests.Session):
         request_meta["method"] = method
         request_meta["start_time"] = time.monotonic()
 
-        response = self._send_request_safe_mode(method, url, **kwargs)
+        response = self._send_request_safe_mode(request, **kwargs)
 
         # record the consumed time
         request_meta["response_time"] = (time.monotonic() - request_meta["start_time"]) * 1000
@@ -159,21 +159,21 @@ class HttpSession(requests.Session):
                 response.url = orig_url
             return response
 
-    def _send_request_safe_mode(self, method, url, **kwargs):
+    def _send_request_safe_mode(self, request, **kwargs):
         """
         Send an HTTP request, and catch any exception that might occur due to connection problems.
 
         Safe mode has been removed from requests 1.x.
         """
         try:
-            return super().request(method, url, **kwargs)
+            return requests.Session.send(self, request, **kwargs)
         except (MissingSchema, InvalidSchema, InvalidURL):
             raise
         except RequestException as e:
             r = LocustResponse()
             r.error = e
             r.status_code = 0  # with this status_code, content returns None
-            r.request = Request(method, url).prepare()
+            r.request = request
             return r
 
 
